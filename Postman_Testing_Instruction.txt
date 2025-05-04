@@ -1,0 +1,16 @@
+User Log in
+{
+  "username": “basicUser",
+  "password": "user12345",
+  "email": "user@example.com",
+  "role": "user"
+}
+
+
+Admin Log in 
+{
+  "username": "adminUser",
+  "password": "admin12345",
+  "email": "admin@example.com",
+  "role": "admin"
+}

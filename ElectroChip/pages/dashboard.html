@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - Project</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+      .logout {
+        text-decoration: none;
+        background-color: #007bff;
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 4px;
+      }
+      .button {
+        background-color: #007bff;
+        color: white;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .button.delete {
+        background-color: #dc3545;
+      }
+      .button.edit {
+        background-color: #28a745;
+      }
+      .form-container {
+        margin-top: 20px;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+      }
+      .form-group input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      .error {
+        color: red;
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h2>Welcome, {{ username }}!</h2>
+      <form action="/logout" method="POST">
+        <input type="submit" value="Logout" class="button" />
+      </form>
+    </div>
+
+    <!-- Add New Item Form -->
+    <div class="form-container">
+      <h3>Add New Item</h3>
+      {% if error %}
+      <p class="error">{{ error }}</p>
+      {% endif %}
+      <form action="/inventory" method="POST">
+        <div class="form-group">
+          <label for="item_name">Item Name:</label>
+          <input type="text" id="item_name" name="item_name" required />
+        </div>
+        <div class="form-group">
+          <label for="description">Description:</label>
+          <input type="text" id="description" name="description" required />
+        </div>
+        <div class="form-group">
+          <label for="quantity">Quantity:</label>
+          <input type="number" id="quantity" name="quantity" required min="0" />
+        </div>
+        <div class="form-group">
+          <label for="price">Price:</label>
+          <input
+            type="number"
+            id="price"
+            name="price"
+            required
+            min="0"
+            step="0.01"
+          />
+        </div>
+        <input type="submit" value="Add Item" class="button" />
+      </form>
+    </div>
+
+    <h3>Your Inventory</h3>
+    {% if items %}
+    <table>
+      <tr>
+        <th>ID</th>
+        {% if session['role'] == 'admin' %}
+        <th>Owner</th>
+        {% endif %}
+        <th>Item Name</th>
+        <th>Description</th>
+        <th>Quantity</th>
+        <th>Price</th>
+        <th>Actions</th>
+      </tr>
+      {% for item in items %}
+      <tr id="item-row-{{ item.id }}">
+        <td>{{ item.id }}</td>
+        {% if session['role'] == 'admin' %}
+        <td>{{ item.owner }}</td>
+        {% endif %}
+        <td>
+          <span class="view-mode">{{ item.item_name }}</span>
+          <input
+            type="text"
+            class="edit-mode"
+            style="display: none"
+            value="{{ item.item_name }}"
+          />
+        </td>
+        <td>
+          <span class="view-mode">{{ item.description }}</span>
+          <input
+            type="text"
+            class="edit-mode"
+            style="display: none"
+            value="{{ item.description }}"
+          />
+        </td>
+        <td>
+          <span class="view-mode">{{ item.quantity }}</span>
+          <input
+            type="number"
+            class="edit-mode"
+            style="display: none"
+            value="{{ item.quantity }}"
+            min="0"
+          />
+        </td>
+        <td>
+          <span class="view-mode">{{ item.price }}</span>
+          <input
+            type="number"
+            class="edit-mode"
+            style="display: none"
+            value="{{ item.price }}"
+            min="0"
+            step="0.01"
+          />
+        </td>
+        <td>
+          <button onclick="toggleEdit('{{ item.id }}')" class="button edit">
+            Edit
+          </button>
+          <button
+            onclick="saveEdit('{{ item.id }}')"
+            class="button"
+            style="display: none"
+          >
+            Save
+          </button>
+          <button onclick="deleteItem('{{ item.id }}')" class="button delete">
+            Delete
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p>No inventory items available.</p>
+    {% endif %}
+
+    <script>
+      function toggleEdit(itemId) {
+        const row = document.getElementById(`item-row-${itemId}`);
+        const viewModes = row.getElementsByClassName("view-mode");
+        const editModes = row.getElementsByClassName("edit-mode");
+        const editButton = row.querySelector("button.edit");
+        // Assuming the second button in the Actions cell is the Save button.
+        const saveButton = row.querySelector("button:nth-child(2)");
+
+        for (let view of viewModes) {
+          view.style.display = "none";
+        }
+        for (let edit of editModes) {
+          edit.style.display = "inline";
+        }
+        editButton.style.display = "none";
+        saveButton.style.display = "inline";
+      }
+
+      function saveEdit(itemId) {
+        const row = document.getElementById(`item-row-${itemId}`);
+        const inputs = row.getElementsByClassName("edit-mode");
+        const data = {
+          item_name: inputs[0].value,
+          description: inputs[1].value,
+          quantity: parseInt(inputs[2].value),
+          price: parseFloat(inputs[3].value),
+        };
+
+        fetch(`/inventory/${itemId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
+          credentials: "include",
+        })
+          .then((response) => {
+            if (response.ok) {
+              location.reload();
+            } else {
+              response.json().then((data) => {
+                alert("Failed to update item: " + (data.error || ""));
+              });
+            }
+          })
+          .catch((error) => {
+            alert("Error updating item");
+            console.error(error);
+          });
+      }
+
+      function deleteItem(itemId) {
+        if (confirm("Are you sure you want to delete this item?")) {
+          fetch(`/inventory/${itemId}`, {
+            method: "DELETE",
+            credentials: "include",
+          })
+            .then((response) => {
+              if (response.ok) {
+                location.reload();
+              } else {
+                response.json().then((data) => {
+                  alert("Failed to delete item: " + (data.error || ""));
+                });
+              }
+            })
+            .catch((error) => {
+              alert("Error deleting item");
+              console.error(error);
+            });
+        }
+      }
+    </script>
+  </body>
+</html>
