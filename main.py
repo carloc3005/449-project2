@@ -30,8 +30,7 @@ def get_config():
 async def on_startup():
     await init_mongo()
     from db import Base, engine
-    Base.metadata.create_all(bind=engine)  # <-- Comment this out to skip MySQL
-    pass
+    Base.metadata.create_all(bind=engine)
 
 @app.exception_handler(AuthJWTException)
 def authjwt_exception_handler(request, exc: AuthJWTException):
