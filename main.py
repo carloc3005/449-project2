@@ -206,5 +206,34 @@ async def sql_delete_items(item_id: int, current_user: User = Depends(get_curren
         raise HTTPException(404, detail='Record not found')
     db.delete(item)
     db.commit()
-    return {"message": "Record deleted successfully"} 
+    return {"message": "Record deleted successfully"}
+
+@app.patch("/sql/inventory/{item_id}", response_model=SQLInventoryItemOut)
+async def sql_update_item(
+    item_id: int,
+    item_update: InventoryItemUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_mysql_db)
+):
+    # Fetch the item from the database
+    item = db.query(SQLInventoryItem).filter(
+        SQLInventoryItem.item_id == item_id,
+        SQLInventoryItem.owner_username == current_user.username
+    ).first()
+
+    # If the item does not exist or does not belong to the current user, raise an error
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found or not authorized")
+
+    # Update the fields of the item with the provided data
+    update_data = item_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(item, key, value)
+
+    # Commit the changes to the database
+    db.commit()
+    db.refresh(item)
+
+    # Return the updated item
+    return item
 
