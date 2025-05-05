@@ -1,75 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>User Signup - Project</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: url("/images/img1.jpg") no-repeat center center;
-      background-size: cover;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
-    .container {
-      background-color: rgba(255, 255, 255, 0.9);
-      padding: 40px;
-      border-radius: 8px;
-      max-width: 400px;
-      width: 90%;
-      box-sizing: border-box;
-      text-align: center;
-    }
-    input[type="text"],
-    input[type="password"],
-    input[type="email"] {
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 16px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
-    input[type="submit"] {
-      width: 100%;
-      padding: 12px;
-      background-color: #28a745;
-      border: none;
-      border-radius: 4px;
-      color: #fff;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    input[type="submit"]:hover {
-      background-color: #218838;
-    }
-    .error {
-      color: red;
-      margin-bottom: 16px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Signup - ElectroChip</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 </head>
 <body>
-  <div class="container">
-    <h2>User Signup</h2>
-    {% if error %}
-      <p class="error">{{ error }}</p>
-    {% endif %}
-    <form action="/signup_user" method="POST">
-      <label for="username">Username:</label>
-      <input type="text" id="username" name="username" required />
-      
-      <label for="password">Password:</label>
-      <input type="password" id="password" name="password" required />
+    <div class="container mt-5">
+        <h2>Sign Up as User</h2>
+        <div id="error-message" class="alert alert-danger" style="display: none;"></div>
+        <form id="signup-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" class="form-control" id="username" name="username" required pattern="^[a-zA-Z][a-zA-Z0-9-_]{2,49}$" title="Username must start with a letter and contain 3-50 alphanumeric characters, hyphens, or underscores.">
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required pattern="^[a-zA-Z][a-zA-Z0-9-_]{2,49}$" title="Password must start with a letter and contain 3-50 alphanumeric characters, hyphens, or underscores.">
+            </div>
+            <button type="submit" class="btn btn-primary">Sign Up</button>
+        </form>
+        <p class="mt-3">Already have an account? <a href="{{ url_for('login_page') }}">Login</a></p>
+    </div>
 
-      <label for="email">Email:</label>
-      <input type="email" id="email" name="email" required />
+    <script>
+        document.getElementById('signup-form').addEventListener('submit', async function(event) {
+            event.preventDefault(); // Prevent default form submission
 
-      <input type="submit" value="Sign Up as User" />
-    </form>
-  </div>
+            const form = event.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            const errorMessageDiv = document.getElementById('error-message');
+            errorMessageDiv.style.display = 'none'; // Hide previous errors
+            errorMessageDiv.textContent = '';
+
+            try {
+                const response = await fetch('{{ url_for("register_user") }}', { // Use FastAPI endpoint
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    // Redirect to login page on successful registration
+                    window.location.href = '{{ url_for("login_page") }}';
+                } else {
+                    const errorData = await response.json();
+                    errorMessageDiv.textContent = errorData.detail || 'Registration failed. Please check your input.';
+                    errorMessageDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Signup error:', error);
+                errorMessageDiv.textContent = 'An unexpected error occurred. Please try again.';
+                errorMessageDiv.style.display = 'block';
+            }
+        });
+    </script>
 </body>
 </html>
