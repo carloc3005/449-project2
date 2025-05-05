@@ -1,38 +1,25 @@
 # ------------------- Imports -------------------
 import os
 from fastapi import FastAPI, Depends, HTTPException, status
-from pydantic import BaseModel, Field, EmailStr, BaseSettings
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from pydantic import BaseModel, Field, EmailStr # Removed BaseSettings import
+# Removed SQLAlchemy imports, they are now in sql.py
+from sqlalchemy.orm import Session # Keep Session for type hinting
 from passlib.context import CryptContext
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie, Document, Link # Added Link
-from dotenv import load_dotenv
+from dotenv import load_dotenv # Keep for MONGO/JWT
 from typing import List, Optional
 from pydantic import Field as PydanticField # Alias Pydantic Field to avoid conflict if needed later
 import uuid # For generating item IDs
 
+# Import from sql.py
+from sql import SessionLocal, engine, Base, User, ElectronicComponent, create_db_tables, settings
+
 # ------------------- Environment Variables & Settings -------------------
-load_dotenv() # Load variables from .env file
-
-class Settings(BaseSettings):
-    # SQLAlchemy (MySQL) Settings
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "mysql+mysqlconnector://user:password@host/db_name")
-
-    # Beanie (MongoDB) Settings
-    MONGO_CONNECTION_STRING: str = os.getenv("MONGO_CONNECTION_STRING", "mongodb://user:password@host:port")
-    MONGO_DATABASE_NAME: str = os.getenv("MONGO_DATABASE_NAME", "default_mongo_db")
-
-    # JWT Settings
-    authjwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "a_very_secret_key") # Should be complex and stored securely
-
-    class Config:
-        env_file = ".env" # Specify the env file (optional if named .env)
-
-settings = Settings()
+# load_dotenv() # Moved to sql.py
+# Settings class is now imported from sql.py
 
 # ------------------- FastAPI App Initialization -------------------
 app = FastAPI()
@@ -43,6 +30,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # ------------------- JWT Authentication Setup -------------------
 @AuthJWT.load_config
 def get_config():
+    # Use the imported settings object
     return settings
 
 @app.exception_handler(AuthJWTException)
@@ -50,12 +38,11 @@ def authjwt_exception_handler(request, exc: AuthJWTException):
     return HTTPException(status_code=exc.status_code, detail=exc.message)
 
 # ------------------- SQLAlchemy (MySQL) Setup -------------------
-engine = create_engine(settings.DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# engine, SessionLocal, Base are now imported from sql.py
 
 # Dependency function to get a MySQL DB session
-def get_mysql_db():
+def get_db(): # Renamed from get_mysql_db, removed the duplicate get_db
+    # Use SessionLocal imported from sql.py
     db = SessionLocal()
     try:
         yield db
@@ -87,18 +74,12 @@ async def init_mongo_db():
 async def on_startup():
     # Initialize MongoDB connection when the app starts
     await init_mongo_db()
-    # Create MySQL tables (including the new 'role' column in 'users')
-    Base.metadata.create_all(bind=engine) # Uncommented to ensure table creation/update
+    # Create MySQL tables using the function from sql.py
+    create_db_tables() # Call the function imported from sql.py
 
 # ------------------- SQLAlchemy Models (MySQL Tables) -------------------
-# Example: User model stored in MySQL for authentication
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, index=True, nullable=False)
-    email = Column(String(100), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=False)
-    role = Column(String(50), default='user', nullable=False) # Added role field ('user' or 'admin')
+# User model is now imported from sql.py
+# ElectronicComponent model is now imported from sql.py
 
 # ------------------- Beanie Documents (MongoDB Collections) -------------------
 class InventoryItem(Document):
@@ -171,9 +152,10 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 # Dependency to get current user from JWT and check roles
-async def get_current_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_mysql_db)) -> User:
+async def get_current_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)) -> User: # Changed to use get_db
     Authorize.jwt_required()
     current_username = Authorize.get_jwt_subject()
+    # Use the imported User model for querying
     user = db.query(User).filter(User.username == current_username).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -190,8 +172,8 @@ async def require_admin(current_user: User = Depends(get_current_user)):
 # --- Authentication Endpoints (using MySQL for user storage) ---
 
 @app.post('/register', response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def register_user(user: UserCreate, db: Session = Depends(get_mysql_db)):
-    # Check if username or email already exists
+def register_user(user: UserCreate, db: Session = Depends(get_db)): # Changed to use get_db
+    # Check if username or email already exists using the imported User model
     db_user_by_username = db.query(User).filter(User.username == user.username).first()
     if db_user_by_username:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already registered")
@@ -203,11 +185,12 @@ def register_user(user: UserCreate, db: Session = Depends(get_mysql_db)):
 
     # Hash the password
     hashed_password = get_password_hash(user.password)
-    # Create new user instance, including the role
+    # Create new user instance using the imported User model
+    # Use the correct column name 'password' from the model for the hashed value
     new_user = User(
         username=user.username,
         email=user.email,
-        hashed_password=hashed_password,
+        password=hashed_password, # Assign hashed password to the 'password' field
         role=user.role # Assign role from input (defaults to 'user' in schema)
     )
     # Add to session and commit
@@ -217,11 +200,12 @@ def register_user(user: UserCreate, db: Session = Depends(get_mysql_db)):
     return new_user
 
 @app.post('/login', response_model=Token)
-def login_for_access_token(form_data: UserLogin, Authorize: AuthJWT = Depends(), db: Session = Depends(get_mysql_db)):
-    # Find user by username
+def login_for_access_token(form_data: UserLogin, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)): # Changed to use get_db
+    # Find user by username using the imported User model
     user = db.query(User).filter(User.username == form_data.username).first()
     # Check if user exists and password is correct
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    # Use the 'password' field from the retrieved user object for verification
+    if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -333,6 +317,6 @@ if __name__ == "__main__":
     # uvicorn main:app --reload --host 0.0.0.0 --port 8000
     # This block is mainly for informational purposes or simple testing.
     print("Starting Uvicorn server...")
-    print("Please create a .env file with DATABASE_URL, MONGO_CONNECTION_STRING, MONGO_DATABASE_NAME, and JWT_SECRET_KEY")
+    print("Please ensure a .env file exists with DATABASE_URL, MONGO_CONNECTION_STRING, MONGO_DATABASE_NAME, and JWT_SECRET_KEY")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
