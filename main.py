@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response, Cookie
 from sqlalchemy.orm import Session
 from db import get_mysql_db, init_mongo
-from models import User, InventoryItem
+from models import User, InventoryItem, SQLInventoryItem
 from schemas import (
     UserCreate, UserLogin, UserOut,
-    InventoryItemCreate, InventoryItemUpdate, InventoryItemOut
+    InventoryItemCreate, InventoryItemUpdate, InventoryItemOut, SQLInventoryItemOut
 )
 from auth import (
     get_password_hash, verify_password,
@@ -29,8 +29,8 @@ def get_config():
 @app.on_event("startup")
 async def on_startup():
     await init_mongo()
-    # from db import Base, engine
-    # Base.metadata.create_all(bind=engine)  # <-- Comment this out to skip MySQL
+    from db import Base, engine
+    Base.metadata.create_all(bind=engine)  # <-- Comment this out to skip MySQL
     pass
 
 @app.exception_handler(AuthJWTException)
@@ -171,3 +171,41 @@ async def admin_create_inventory(
     return new_item
 
 # (You can add more admin-only endpoints as needed)
+
+@app.get("/sql/inventory", response_model=List[SQLInventoryItemOut])
+async def sql_get_inventory (current_user: User = Depends(get_current_user),db: Session = Depends(get_mysql_db)):
+    user_items = db.query(SQLInventoryItem).filter(SQLInventoryItem.owner_username == current_user.username).all()
+    if not user_items:
+        return []
+    return user_items
+
+@app.get("/sql/inventory/{item_id}", response_model=SQLInventoryItemOut)
+async def sql_get_item_by_id (item_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_mysql_db)):
+    item = db.query(SQLInventoryItem).filter(SQLInventoryItem.item_id == item_id, SQLInventoryItem.owner_username == current_user.username).first()
+    if not item:
+        raise HTTPException(404, detail='Item not found')
+    return item
+
+@app.post("/sql/inventory", response_model=SQLInventoryItemOut)
+async def insert_new_item (item: InventoryItemCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_mysql_db)):
+    new_item = SQLInventoryItem(
+        item_name=item.item_name,
+        description=item.description,
+        quantity=item.quantity,
+        price=item.price,
+        owner_username=current_user.username
+    )
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return new_item
+
+@app.delete("/sql/inventory/{item_id}")
+async def sql_delete_items(item_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_mysql_db)):
+    item = db.query(SQLInventoryItem).filter(SQLInventoryItem.item_id == item_id, SQLInventoryItem.owner_username == current_user.username).first()
+    if not item:
+        raise HTTPException(404, detail='Record not found')
+    db.delete(item)
+    db.commit()
+    return {"message": "Record deleted successfully"} 
+

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy.orm import relationship
 from db import Base
 from beanie import Document
 from pydantic import Field
@@ -13,6 +14,19 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), default="user", nullable=False)  # "user" or "admin"
+    
+    items = relationship("SQLInventoryItem", back_populates='owner')
+    
+class SQLInventoryItem(Base):
+    __tablename__ = "inventory_items"
+    item_id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    price = Column(Float, nullable=False)
+    owner_username = Column(String(50), ForeignKey("users.username"))
+    
+    owner = relationship("User", back_populates="items")
 
 # Beanie InventoryItem model (MongoDB)
 class InventoryItem(Document):
