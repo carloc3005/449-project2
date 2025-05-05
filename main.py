@@ -34,7 +34,7 @@ async def on_startup():
 
 @app.exception_handler(AuthJWTException)
 def authjwt_exception_handler(request, exc: AuthJWTException):
-    return HTTPException(status_code=exc.status_code, detail=exc.message)
+    raise HTTPException(status_code=exc.status_code, detail=exc.message)
 
 # ------------------- User Registration & Login (Session/Cookie) -------------------
 
@@ -86,16 +86,31 @@ def get_current_user(request: Request, db: Session = Depends(get_mysql_db)):
 # ------------------- Admin JWT Login -------------------
 
 @app.post("/admin/login")
-def admin_login(user: UserLogin, Authorize: AuthJWT = Depends(), db: Session = Depends(get_mysql_db)):
+def admin_login(user: UserLogin, response: Response, Authorize: AuthJWT = Depends(), db: Session = Depends(get_mysql_db)):
     db_user = db.query(User).filter(User.username == user.username, User.role == "admin").first()
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid admin credentials")
     access_token = Authorize.create_access_token(subject=db_user.username)
-    return {"access_token": access_token}
+    
+    response.set_cookie(
+        key='admin_token',
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite='lax'
+    )
+    return {"message": 'Login successful'}
 
 # Dependency for admin JWT
-def get_admin_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_mysql_db)):
-    Authorize.jwt_required()
+def get_admin_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_mysql_db), request: Request = None):
+    token = request.cookies.get('admin_token')
+    if not token: 
+        raise HTTPException(401, detail='Admin token missing')
+    try:
+        Authorize._token = token
+        Authorize.jwt_required()
+    except Exception as e:
+        raise HTTPException(401, detail='Invalid token')
     username = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.username == username, User.role == "admin").first()
     if not user:
@@ -237,3 +252,7 @@ async def sql_update_item(
     # Return the updated item
     return item
 
+
+@app.get('/admin/sql/inventory')
+async def admin_inventory(db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
+    return {'msg', 'it worked?'}
