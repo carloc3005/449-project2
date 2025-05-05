@@ -252,7 +252,78 @@ async def sql_update_item(
     # Return the updated item
     return item
 
+@app.get("/sql/admin/inventory", response_model=List[SQLInventoryItemOut])
+async def admin_get_all_items(
+    page: int = 1,
+    db: Session = Depends(get_mysql_db),
+    admin: User = Depends(get_admin_user)
+):
+    # Pagination logic: 50 items per page
+    items_per_page = 50
+    offset = (page - 1) * items_per_page
 
-@app.get('/admin/sql/inventory')
-async def admin_inventory(db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
-    return {'msg', 'it worked?'}
+    # Query all items with pagination
+    items = db.query(SQLInventoryItem).offset(offset).limit(items_per_page).all()
+
+    return items
+
+
+@app.patch("/sql/admin/inventory/{item_id}", response_model=SQLInventoryItemOut)
+async def admin_update_item(
+    item_id: int,
+    item_update: InventoryItemUpdate,
+    db: Session = Depends(get_mysql_db),
+    admin: User = Depends(get_admin_user)
+):
+    # Fetch the item from the database
+    item = db.query(SQLInventoryItem).filter(SQLInventoryItem.item_id == item_id).first()
+
+    # If the item does not exist, raise an error
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Update the fields of the item with the provided data
+    update_data = item_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(item, key, value)
+
+    # Commit the changes to the database
+    db.commit()
+    db.refresh(item)
+
+    # Return the updated item
+    return item
+
+
+@app.delete("/sql/admin/inventory/{item_id}")
+async def admin_delete_item(
+    item_id: int,
+    db: Session = Depends(get_mysql_db),
+    admin: User = Depends(get_admin_user)
+):
+    # Fetch the item from the database
+    item = db.query(SQLInventoryItem).filter(SQLInventoryItem.item_id == item_id).first()
+
+    # If the item does not exist, raise an error
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Delete the item from the database
+    db.delete(item)
+    db.commit()
+
+    return {"message": "Item deleted successfully"}
+
+
+@app.post("/sql/admin/inventory", response_model=SQLInventoryItemOut)
+async def sql_get_inventory (item: InventoryItemCreate, current_user: User = Depends(get_admin_user),db: Session = Depends(get_mysql_db)):
+    new_item = SQLInventoryItem(
+        item_name=item.item_name,
+        description=item.description,
+        quantity=item.quantity,
+        price=item.price,
+    )
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return new_item
