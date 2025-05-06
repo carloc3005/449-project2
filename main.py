@@ -1,6 +1,10 @@
+from dotenv import load_dotenv
+
+load_dotenv() # Load environment variables from .env file
+
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response, Cookie
 from sqlalchemy.orm import Session
-from db import get_mysql_db, init_mongo
+from db import get_mysql_db, init_mongo, Base, init_mysql # Import init_mysql and Base
 from models import User, InventoryItem, SQLInventoryItem
 from schemas import (
     UserCreate, UserLogin, UserOut,
@@ -28,9 +32,9 @@ def get_config():
 
 @app.on_event("startup")
 async def on_startup():
+    mysql_engine = init_mysql() # Initialize MySQL connection here and get the engine
     await init_mongo()
-    from db import Base, engine
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=mysql_engine) # Use the returned engine
 
 @app.exception_handler(AuthJWTException)
 def authjwt_exception_handler(request, exc: AuthJWTException):
@@ -184,6 +188,28 @@ async def admin_create_inventory(
     await new_item.insert()
     return new_item
 
+@app.patch("/admin/inventory/{item_id}", response_model=InventoryItemOut)
+async def admin_update_inventory_item(
+    item_id: str,
+    item_update: InventoryItemUpdate,
+    admin: User = Depends(get_admin_user)
+):
+    item = await InventoryItem.find_one(InventoryItem.item_id == item_id)
+    if not item or item.owner_username != admin.username:
+        raise HTTPException(status_code=404, detail="Item not found or not authorized for admin")
+    update_data = item_update.dict(exclude_unset=True)
+    await item.update({"$set": update_data})
+    updated_item = await InventoryItem.find_one(InventoryItem.item_id == item_id)
+    return updated_item
+
+@app.delete("/admin/inventory/{item_id}")
+async def admin_delete_inventory_item(item_id: str, admin: User = Depends(get_admin_user)):
+    item = await InventoryItem.find_one(InventoryItem.item_id == item_id)
+    if not item or item.owner_username != admin.username:
+        raise HTTPException(status_code=404, detail="Item not found or not authorized for admin")
+    await item.delete()
+    return {"message": "Admin item deleted"}
+
 # (You can add more admin-only endpoints as needed)
 
 @app.get("/sql/inventory", response_model=List[SQLInventoryItemOut])
@@ -252,7 +278,70 @@ async def sql_update_item(
     # Return the updated item
     return item
 
+# ------------------- Admin SQL Inventory CRUD (JWT) -------------------
 
-@app.get('/admin/sql/inventory')
-async def admin_inventory(db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
-    return {'msg', 'it worked?'}
+@app.get('/admin/sql/inventory', response_model=List[SQLInventoryItemOut])
+async def admin_sql_get_inventory(db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
+    """Lists all SQL inventory items belonging to the authenticated admin."""
+    items = db.query(SQLInventoryItem).filter(SQLInventoryItem.owner_username == admin.username).all()
+    return items
+
+@app.post('/admin/sql/inventory', response_model=SQLInventoryItemOut)
+async def admin_sql_create_item(item: InventoryItemCreate, db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
+    """Creates a new SQL inventory item for the authenticated admin."""
+    new_item = SQLInventoryItem(
+        **item.dict(),
+        owner_username=admin.username
+    )
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return new_item
+
+@app.get('/admin/sql/inventory/{item_id}', response_model=SQLInventoryItemOut)
+async def admin_sql_get_item(item_id: int, db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
+    """Gets a specific SQL inventory item by ID, belonging to the authenticated admin."""
+    item = db.query(SQLInventoryItem).filter(
+        SQLInventoryItem.item_id == item_id,
+        SQLInventoryItem.owner_username == admin.username
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Admin SQL item not found or not authorized")
+    return item
+
+@app.patch('/admin/sql/inventory/{item_id}', response_model=SQLInventoryItemOut)
+async def admin_sql_update_item(
+    item_id: int,
+    item_update: InventoryItemUpdate,
+    db: Session = Depends(get_mysql_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Updates a specific SQL inventory item by ID, belonging to the authenticated admin."""
+    item = db.query(SQLInventoryItem).filter(
+        SQLInventoryItem.item_id == item_id,
+        SQLInventoryItem.owner_username == admin.username
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Admin SQL item not found or not authorized")
+
+    update_data = item_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(item, key, value)
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+@app.delete('/admin/sql/inventory/{item_id}')
+async def admin_sql_delete_item(item_id: int, db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
+    """Deletes a specific SQL inventory item by ID, belonging to the authenticated admin."""
+    item = db.query(SQLInventoryItem).filter(
+        SQLInventoryItem.item_id == item_id,
+        SQLInventoryItem.owner_username == admin.username
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Admin SQL item not found or not authorized")
+
+    db.delete(item)
+    db.commit()
+    return {"message": "Admin SQL item deleted successfully"}
