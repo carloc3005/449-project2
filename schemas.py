@@ -25,7 +25,7 @@ class UserOut(BaseModel):
 class InventoryItemBase(BaseModel):
     item_name: str
     description: Optional[str] = None
-    quantity: int = Field(..., gt=0,)
+    quantity: int = Field(..., ge=0)
     price: float = Field(..., ge=0.0)
 
 class InventoryItemCreate(InventoryItemBase):
@@ -34,7 +34,7 @@ class InventoryItemCreate(InventoryItemBase):
 class InventoryItemUpdate(BaseModel):
     item_name: Optional[str] = None
     description: Optional[str] = None
-    quantity: Optional[int] = Field(None, gt=0)
+    quantity: Optional[int] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0.0)
 
 class InventoryItemOut(InventoryItemBase):

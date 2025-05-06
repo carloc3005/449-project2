@@ -24,7 +24,7 @@ class SQLInventoryItem(Base):
     description = Column(String(255), nullable=False)
     quantity = Column(Integer, nullable=False)
     price = Column(Float, nullable=False)
-    owner_username = Column(String(50), ForeignKey("users.username"))
+    owner_username = Column(String(50), ForeignKey("users.username"), index=True)
     
     owner = relationship("User", back_populates="items")
 
