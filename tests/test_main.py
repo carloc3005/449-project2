@@ -311,7 +311,7 @@ async def test_admin_create_sql_item(admin_logged_in_client: AsyncClient, regist
 
 
 async def test_admin_get_sql_list(admin_logged_in_client: AsyncClient, registered_admin, db_session):
-    """Test admin getting their SQL item list."""
+    """Test admin getting the full SQL item list."""
     item1 = SQLInventoryItem(item_name="AdminSqlA", quantity=1, price=1.0, owner_username=registered_admin.username, description="dA")
     item2 = SQLInventoryItem(item_name="UserSqlB", quantity=2, price=2.0, owner_username="testuser", description="dB") # Non-admin item
     db_session.add_all([item1, item2])
@@ -320,9 +320,12 @@ async def test_admin_get_sql_list(admin_logged_in_client: AsyncClient, registere
     response = await admin_logged_in_client.get("/admin/sql/inventory")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["item_name"] == "AdminSqlA"
-    assert data[0]["owner_username"] == registered_admin.username
+    # Admin should now see all items
+    assert len(data) == 2
+    # Check if both items are present (order might vary)
+    item_names = {item['item_name'] for item in data}
+    assert "AdminSqlA" in item_names
+    assert "UserSqlB" in item_names
 
 
 async def test_admin_get_sql_item(admin_logged_in_client: AsyncClient, registered_admin, db_session):

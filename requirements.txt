@@ -15,3 +15,4 @@ httpx==0.27.0 # Pin version for compatibility
 pytest-asyncio # For async tests
 respx # For mocking HTTP requests (like MongoDB if not using a test DB)
 asynctest # For mocking async functions/methods
+email-validator # Required for Pydantic EmailStr validation

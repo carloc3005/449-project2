@@ -173,7 +173,8 @@ async def delete_inventory_item(item_id: str, current_user: User = Depends(get_c
 
 @app.get("/admin/inventory", response_model=List[InventoryItemOut])
 async def admin_get_inventory(admin: User = Depends(get_admin_user)):
-    items = await InventoryItem.find(InventoryItem.owner_username == admin.username).to_list()
+    # Remove the filter by admin.username to get all items
+    items = await InventoryItem.find().to_list()
     return items
 
 @app.post("/admin/inventory", response_model=InventoryItemOut)
@@ -282,8 +283,9 @@ async def sql_update_item(
 
 @app.get('/admin/sql/inventory', response_model=List[SQLInventoryItemOut])
 async def admin_sql_get_inventory(db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
-    """Lists all SQL inventory items belonging to the authenticated admin."""
-    items = db.query(SQLInventoryItem).filter(SQLInventoryItem.owner_username == admin.username).all()
+    """Lists all SQL inventory items in the system for the authenticated admin."""
+    # Remove the filter by admin.username to get all items
+    items = db.query(SQLInventoryItem).all()
     return items
 
 @app.post('/admin/sql/inventory', response_model=SQLInventoryItemOut)
@@ -310,7 +312,7 @@ async def admin_sql_get_item(item_id: int, db: Session = Depends(get_mysql_db), 
     return item
 
 @app.patch('/admin/sql/inventory/{item_id}', response_model=SQLInventoryItemOut)
-async def admin_sql_update_item(
+def admin_sql_update_item(
     item_id: int,
     item_update: InventoryItemUpdate,
     db: Session = Depends(get_mysql_db),
@@ -333,7 +335,7 @@ async def admin_sql_update_item(
     return item
 
 @app.delete('/admin/sql/inventory/{item_id}')
-async def admin_sql_delete_item(item_id: int, db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
+def admin_sql_delete_item(item_id: int, db: Session = Depends(get_mysql_db), admin: User = Depends(get_admin_user)):
     """Deletes a specific SQL inventory item by ID, belonging to the authenticated admin."""
     item = db.query(SQLInventoryItem).filter(
         SQLInventoryItem.item_id == item_id,
