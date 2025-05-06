@@ -1,6 +1,10 @@
 from dotenv import load_dotenv
+import logging # Add this import
 
 load_dotenv() # Load environment variables from .env file
+
+# Add basic logging configuration
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response, Cookie
 from sqlalchemy.orm import Session
